@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard GMV Cassol · Conexão Direta</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+    :root { --bg: #07090e; --acc: #00d68f; --txt: #e8eaf0; --s1: #0e1118; --s2: #1c2233; }
+    body { background: var(--bg); color: var(--txt); font-family: sans-serif; padding: 30px; margin: 0; }
+    .card { background: var(--s1); border: 1px solid var(--s2); padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+    .stat-n { font-size: 28px; font-weight: 800; color: var(--acc); display: block; }
+    .stat-label { font-size: 11px; color: #5a6478; text-transform: uppercase; }
+    #loader { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 999; }
+    .spinner { width: 40px; height: 40px; border: 4px solid var(--s2); border-top-color: var(--acc); border-radius: 50%; animation: s 1s linear infinite; }
+    @keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="loader">
+    <div class="spinner"></div>
+    <p style="margin-top:15px; font-size:12px; letter-spacing:1px">CARREGANDO BASE CASSOL...</p>
+</div>
+
+<div class="card">
+    <h1 style="font-size:22px; margin:0">📊 Dashboard GMV <span style="color:var(--acc)">Cassol</span></h1>
+    <p style="color:#5a6478; font-size:11px" id="status">Conectando à aba da planilha...</p>
+</div>
+
+<div class="stat-grid">
+    <div class="card"><span class="stat-label">GMV Total</span><span id="vGMV" class="stat-n">R$ 0,00</span></div>
+    <div class="card"><span class="stat-label">Pedidos Únicos</span><span id="vPed" class="stat-n">0</span></div>
+    <div class="card"><span class="stat-label">Ticket Médio</span><span id="vTk" class="stat-n">R$ 0,00</span></div>
+</div>
+
+<div class="card">
+    <canvas id="chartCat" height="100"></canvas>
+</div>
+
+<script>
+// LINK DA ABA ESPECÍFICA (GID 1939666425)
+const URL_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQMAMpZ7Eae9O0Rtej5wE6D-6w0CzjzHJXSJ4ignQmni2B-u2uGHCvT6ckQK7sNJA81tBDu6cE2ERQl/pub?gid=1939666425&single=true&output=csv";
+
+// Proxy para evitar erro de CORS no Chrome Local
+const PROXY_URL = "https://api.allorigins.win/raw?url=" + encodeURIComponent(URL_BASE);
+
+function parseMoeda(v) {
+    if(!v) return 0;
+    let res = String(v).replace('R$','').replace(/\./g,'').replace(',','.').trim();
+    return parseFloat(res) || 0;
+}
+
+async function carregarDados() {
+    Papa.parse(PROXY_URL, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+            renderizar(results.data);
+        },
+        error: function() {
+            document.getElementById('status').textContent = "Erro ao acessar a planilha via Chrome.";
+        }
+    });
+}
+
+function renderizar(raw) {
+    // Mapeamento das colunas da sua planilha
+    const data = raw.map(r => ({
+        id: r['ID do Pedido'] || r['ID'] || '',
+        valor: parseMoeda(r['Linha Total'] || r['Valor']),
+        cat: r['Categoria'] || 'Outros'
+    })).filter(d => d.id.includes('CSL-'));
+
+    const gmvTotal = data.reduce((acc, cur) => acc + cur.valor, 0);
+    const pedidosUnicos = new Set(data.map(d => d.id)).size;
+
+    document.getElementById('vGMV').textContent = gmvTotal.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+    document.getElementById('vPed').textContent = pedidosUnicos;
+    document.getElementById('vTk').textContent = (gmvTotal / (pedidosUnicos || 1)).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+    document.getElementById('status').textContent = "Última atualização: " + new Date().toLocaleTimeString();
+
+    // Gráfico de Categorias
+    const cats = {};
+    data.forEach(d => cats[d.cat] = (cats[d.cat] || 0) + d.valor);
+    const labels = Object.keys(cats).sort((a,b) => cats[b] - cats[a]).slice(0,8);
+
+    new Chart(document.getElementById('chartCat'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Vendas por Categoria',
+                data: labels.map(l => cats[l]),
+                backgroundColor: '#00d68f'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { grid: { color: '#1c2233' }, ticks: { color: '#e8eaf0' } },
+                x: { ticks: { color: '#e8eaf0' } }
+            }
+        }
+    });
+
+    document.getElementById('loader').style.display = 'none';
+}
+
+carregarDados();
+</script>
+</body>
+</html>
