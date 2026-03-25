@@ -1,116 +1,102 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<title>Dashboard GMV Cassol · Conexão Direta</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<style>
-    :root { --bg: #07090e; --acc: #00d68f; --txt: #e8eaf0; --s1: #0e1118; --s2: #1c2233; }
-    body { background: var(--bg); color: var(--txt); font-family: sans-serif; padding: 30px; margin: 0; }
-    .card { background: var(--s1); border: 1px solid var(--s2); padding: 20px; border-radius: 12px; margin-bottom: 20px; }
-    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-    .stat-n { font-size: 28px; font-weight: 800; color: var(--acc); display: block; }
-    .stat-label { font-size: 11px; color: #5a6478; text-transform: uppercase; }
-    #loader { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 999; }
-    .spinner { width: 40px; height: 40px; border: 4px solid var(--s2); border-top-color: var(--acc); border-radius: 50%; animation: s 1s linear infinite; }
-    @keyframes s { to { transform: rotate(360deg); } }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard GMV Cassol</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #07090e; --card: #0e1118; --acc: #00d68f; --txt: #e8eaf0; --border: #1c2233; }
+        body { background: var(--bg); color: var(--txt); font-family: 'Syne', sans-serif; margin: 0; padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+        .stat-value { font-size: 32px; font-weight: 800; color: var(--acc); display: block; margin-top: 8px; }
+        .stat-label { font-size: 12px; color: #5a6478; text-transform: uppercase; font-weight: 700; }
+        #loader { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
+        .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--acc); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
 </head>
 <body>
 
-<div id="loader">
-    <div class="spinner"></div>
-    <p style="margin-top:15px; font-size:12px; letter-spacing:1px">CARREGANDO BASE CASSOL...</p>
+<div id="loader"><div class="spinner"></div><p style="margin-top:15px">CONECTANDO AO GOOGLE SHEETS...</p></div>
+
+<header style="margin-bottom: 30px; border-bottom: 1px solid var(--border); padding-bottom: 20px;">
+    <h1>GMV <span style="color:var(--acc)">CASSOL</span></h1>
+    <p id="status" style="color:#5a6478; font-size: 12px;">Sincronizando...</p>
+</header>
+
+<div class="grid">
+    <div class="card"><span class="stat-label">GMV Bruto Total</span><span id="vGMV" class="stat-value">R$ 0,00</span></div>
+    <div class="card"><span class="stat-label">Pedidos Únicos</span><span id="vPed" class="stat-value">0</span></div>
+    <div class="card"><span class="stat-label">Ticket Médio</span><span id="vTk" class="stat-value">R$ 0,00</span></div>
 </div>
 
-<div class="card">
-    <h1 style="font-size:22px; margin:0">📊 Dashboard GMV <span style="color:var(--acc)">Cassol</span></h1>
-    <p style="color:#5a6478; font-size:11px" id="status">Conectando à aba da planilha...</p>
-</div>
-
-<div class="stat-grid">
-    <div class="card"><span class="stat-label">GMV Total</span><span id="vGMV" class="stat-n">R$ 0,00</span></div>
-    <div class="card"><span class="stat-label">Pedidos Únicos</span><span id="vPed" class="stat-n">0</span></div>
-    <div class="card"><span class="stat-label">Ticket Médio</span><span id="vTk" class="stat-n">R$ 0,00</span></div>
-</div>
-
-<div class="card">
-    <canvas id="chartCat" height="100"></canvas>
+<div class="card" style="height: 400px;">
+    <h3 style="margin-top:0">Vendas por Categoria</h3>
+    <canvas id="chartCat"></canvas>
 </div>
 
 <script>
-// LINK DA ABA ESPECÍFICA (GID 1939666425)
-const URL_BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQMAMpZ7Eae9O0Rtej5wE6D-6w0CzjzHJXSJ4ignQmni2B-u2uGHCvT6ckQK7sNJA81tBDu6cE2ERQl/pub?gid=1939666425&single=true&output=csv";
+    // LINK DIRETO SEM PROXY (O GitHub Pages permite isso)
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQMAMpZ7Eae9O0Rtej5wE6D-6w0CzjzHJXSJ4ignQmni2B-u2uGHCvT6ckQK7sNJA81tBDu6cE2ERQl/pub?gid=1939666425&single=true&output=csv";
 
-// Proxy para evitar erro de CORS no Chrome Local
-const PROXY_URL = "https://api.allorigins.win/raw?url=" + encodeURIComponent(URL_BASE);
+    function parseMoeda(v) {
+        if(!v) return 0;
+        let n = String(v).replace('R$','').replace(/\./g,'').replace(',','.').trim();
+        return parseFloat(n) || 0;
+    }
 
-function parseMoeda(v) {
-    if(!v) return 0;
-    let res = String(v).replace('R$','').replace(/\./g,'').replace(',','.').trim();
-    return parseFloat(res) || 0;
-}
-
-async function carregarDados() {
-    Papa.parse(PROXY_URL, {
-        download: true,
-        header: true,
-        skipEmptyLines: true,
-        complete: function(results) {
-            renderizar(results.data);
-        },
-        error: function() {
-            document.getElementById('status').textContent = "Erro ao acessar a planilha via Chrome.";
-        }
-    });
-}
-
-function renderizar(raw) {
-    // Mapeamento das colunas da sua planilha
-    const data = raw.map(r => ({
-        id: r['ID do Pedido'] || r['ID'] || '',
-        valor: parseMoeda(r['Linha Total'] || r['Valor']),
-        cat: r['Categoria'] || 'Outros'
-    })).filter(d => d.id.includes('CSL-'));
-
-    const gmvTotal = data.reduce((acc, cur) => acc + cur.valor, 0);
-    const pedidosUnicos = new Set(data.map(d => d.id)).size;
-
-    document.getElementById('vGMV').textContent = gmvTotal.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-    document.getElementById('vPed').textContent = pedidosUnicos;
-    document.getElementById('vTk').textContent = (gmvTotal / (pedidosUnicos || 1)).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
-    document.getElementById('status').textContent = "Última atualização: " + new Date().toLocaleTimeString();
-
-    // Gráfico de Categorias
-    const cats = {};
-    data.forEach(d => cats[d.cat] = (cats[d.cat] || 0) + d.valor);
-    const labels = Object.keys(cats).sort((a,b) => cats[b] - cats[a]).slice(0,8);
-
-    new Chart(document.getElementById('chartCat'), {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Vendas por Categoria',
-                data: labels.map(l => cats[l]),
-                backgroundColor: '#00d68f'
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: {
-                y: { grid: { color: '#1c2233' }, ticks: { color: '#e8eaf0' } },
-                x: { ticks: { color: '#e8eaf0' } }
+    function init() {
+        Papa.parse(CSV_URL, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                console.log("Dados recebidos:", results.data.length);
+                render(results.data);
+            },
+            error: function(err) {
+                document.getElementById('status').textContent = "Erro ao carregar dados.";
             }
-        }
-    });
+        });
+    }
 
-    document.getElementById('loader').style.display = 'none';
-}
+    function render(raw) {
+        // Mapeamento baseado nos cabeçalhos da sua planilha
+        const data = raw.map(r => ({
+            id: r['ID do Pedido'] || r['id'] || '',
+            valor: parseMoeda(r['Linha Total'] || r['Valor']),
+            cat: r['Categoria'] || 'Outros'
+        })).filter(d => d.id.includes('CSL-'));
 
-carregarDados();
+        const total = data.reduce((a, b) => a + b.valor, 0);
+        const peds = new Set(data.map(d => d.id)).size;
+
+        document.getElementById('vGMV').textContent = total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+        document.getElementById('vPed').textContent = peds;
+        document.getElementById('vTk').textContent = (total / (peds || 1)).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+        document.getElementById('status').textContent = "Última atualização: " + new Date().toLocaleTimeString();
+
+        const cats = {};
+        data.forEach(d => cats[d.cat] = (cats[d.cat] || 0) + d.valor);
+        const labels = Object.keys(cats).sort((a,b) => cats[b] - cats[a]).slice(0, 10);
+
+        new Chart(document.getElementById('chartCat'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'GMV', data: labels.map(l => cats[l]), backgroundColor: '#00d68f', borderRadius: 5 }]
+            },
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+
+        document.getElementById('loader').style.display = 'none';
+    }
+
+    init();
 </script>
 </body>
 </html>
